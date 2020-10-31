@@ -1,0 +1,1 @@
+admin||botusername||botpassword||default_subreddit||short description||oauth_ID||oauth_secret||http://oath_redirect_url
