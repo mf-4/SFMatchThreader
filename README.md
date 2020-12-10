@@ -33,9 +33,12 @@ If/when the bot runs into any HTTP errors (reddit is down, can't access goal.com
 
 If a message is titled 'Match Thread', the bot will attempt to find info about the match and then post a match thread to the specified subreddit. If a message is titled 'Match Info', the bot will attempt to find info about the match and then reply to the user with a template for the match thread so the user can post and update the thread themselves.
 
-#Usage/Setup
+Usage/Setup
+====
 
-##Docker
+Docker
+---
+
 To run this bot in a docker container, the following environment variables must be provided:
 
 - OWNER_USERNAME: User name of the owner. Allows admin access
@@ -51,7 +54,8 @@ To run this bot in a docker container, the following environment variables must 
 
 Use the dockerfile provided to run the bot.
 
-##Command Line
+Command Line
+---
 
 Match Thread Bot uses virtualenv - if you don't have it installed, run 
 `pip install virtualenv`. Then to set up the virtualenv for this project, run: 
