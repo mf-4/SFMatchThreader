@@ -6,6 +6,7 @@ from collections import Counter
 from itertools import groupby
 from time import sleep
 
+
 # TO DO: 
 #  cookielib to http.cookiejar
 # use goal.com to bypass thread request
@@ -41,7 +42,7 @@ usrwhitelist = ['mf__4', 'sfmatchthreadder'
 goal=0;pgoal=1;ogoal=2;mpen=3;yel=4;syel=5;red=6;subst=7;subo=8;subi=9;strms=10;lines=11;evnts=12
 
 # adjust time limit in given subreddit
-custTimeLimit = {'sfmatchthreads': [10], 'scottishfootball': [20]}
+custTimeLimit = {'sfmatchthreads': [10]}
 
 # no time limit to when user can post in specific subreddit
 timewhitelist = {'sfmatchthreads': ['mf__4']}
@@ -55,16 +56,14 @@ def getTimestamp():
 
 def setup():
     try:
-        f = open('/home/mark/match-thread-bot/login.txt')
-        # f = open('login.txt')
-        line = f.readline()
-        admin,username,password,subreddit,user_agent,id,secret,redirect = line.split('||', 8)
+        print(tuple(sys.argv[1:9]))
+        admin,username,password,subreddit,user_agent,id,secret,redirect = tuple(sys.argv[1:9])
+
         print(admin)
-        f.close()
         r = praw.Reddit(client_id=id, client_secret=secret, username=username, password=password, user_agent=user_agent)
         return r,admin,username,password,subreddit,user_agent,id,secret,redirect
     except:
-        print(getTimestamp() + "Setup error: please ensure 'login.txt' file exists in its correct form (check readme for more info)\n")
+        print(getTimestamp() + "Setup error: please ensure environment variables exists in its correct form (check readme for more info)\n")
         logger.exception("[SETUP ERROR:]")
         sleep(10)
 
@@ -86,7 +85,7 @@ def OAuth_login():
 
 # save activeThreads
 def saveData():
-    f = open('/home/mark/match-thread-bot/active_threads.txt', 'w+')
+    f = open('bot_files/active_threads.txt', 'w+')
     s = ''
     print("Saving data")
     for data in activeThreads:
@@ -101,7 +100,7 @@ def saveData():
 # read saved activeThreads data        
 def readData():
     print("Reading in data from file")
-    f = open('/home/mark/match-thread-bot/active_threads.txt', 'r')
+    f = open('bot_files/active_threads.txt', 'r')
     s = f.read()
     print("Content recived is: {}".format(s))
     info = s.split('&&&&')
@@ -124,9 +123,9 @@ def resetAll():
 
 def loadMarkup(subreddit):
     try:
-        markup = [line.rstrip('\n') for line in open('/home/mark/match-thread-bot/' + subreddit + '.txt')]
+        markup = [line.rstrip('\n') for line in open(subreddit + '.txt')]
     except:
-        markup = [line.rstrip('\n') for line in open('/home/mark/match-thread-bot/soccer.txt')]
+        markup = [line.rstrip('\n') for line in open('soccer.txt')]
     return markup
 
 def getRelatedSubreddits():
@@ -638,8 +637,7 @@ def createNewThread(team1, team2, reqr, sub, direct):
         body += markup[lines] + ' '
         body = writeLineUps(sub, body, t1, t1id, t2, t2id, team1Start, team1Sub, team2Start, team2Sub)
 
-        # [^[Request ^a ^match ^thread]](http://www.reddit.com/message/compose/?to=MatchThreadder&subject=Match%20Thread&message=Team%20vs%20Team) ^| [^[Request ^a ^thread ^template]](http://www.reddit.com/message/compose/?to=MatchThreadder&subject=Match%20Info&message=Team%20vs%20Team) ^| [^[Current ^status ^/ ^bot ^info]](http://www.reddit.com/r/soccer/comments/22ah8i/introducing_matchthreadder_a_bot_to_set_up_match/)"
-
+        # "[^[Request ^a ^match ^thread]](http://www.reddit.com/message/compose/?to=SFMatchThreadder&subject=Match%20Thread&message=Team%20vs%20Team)"
         body += '\n\n------------\n\n' + markup[
             evnts] + ' **MATCH EVENTS** | *via [ESPN](http://www.espn.com/soccer/match?gameId=' + matchID + ')*\n\n'
         body += "\n\n--------\n\n*^(Don't see a thread for a match you're watching?) [^(Click here)](https://www.reddit.com/r/soccer/wiki/matchthreads#wiki_match_thread_bot) ^(to learn how to request a match thread from this bot.)*"
@@ -831,7 +829,7 @@ def checkAndCreate():
                 if threadStatus == 0: # thread created successfully
                     msg.reply("[Here](http://www.reddit.com/r/" + sub + "/comments/" + thread_id + ") is a link to the thread you've requested. Thanks for using this bot!\n\n-------------------------\n\n*Did I create a thread for the wrong match? [Click here and press send](http://www.reddit.com/message/compose/?to=" + username + "&subject=delete&message=" + thread_id + ") to delete the thread (note: this will only work within five minutes of the thread's creation). This probably means that I can't find the right match - sorry!*")
                     if notify:
-                        r.redditor(admin).message('Thread Made', "Match thread request fulfilled /u/" + msg.author.name + " requested " + teams[0] + " vs " + teams[1] + " in /r/" + sub + ". \n\n[Thread link](http://www.reddit.com/r/" + sub + "/comments/" + thread_id + ") | [Deletion link](http://www.reddit.com/message/compose/?to=" + username + "&subject=delete&message=" + thread_id + ")")
+                        message_bot("Match thread request fulfilled /u/" + msg.author.name + " requested " + teams[0] + " vs " + teams[1] + " in /r/" + sub + ". \n\nThread link: http://www.reddit.com/r/" + sub + "/comments/" + thread_id + " | Deletion link: http://www.reddit.com/message/compose/?to=" + username + "&subject=delete&message=" + thread_id)
                 if threadStatus == 1: # not found
                     msg.reply("Sorry, I couldn't find info for that match. In the future I'll account for more matches around the world.\n\n-------------------------\n\n*Why not run your own match thread? [Look here](https://www.reddit.com/r/soccer/wiki/matchthreads) for templates, tips, and example match threads from the past if you're not sure how.*\n\n*You could also check out these match thread creation tools from /u/afito and /u/Mamu7490:*\n\n*[RES Templates](https://www.reddit.com/r/soccer/comments/3ndd7b/matchthreads_for_beginners_the_easy_way/)*\n\n*[MTmate](https://www.reddit.com/r/soccer/comments/3huyut/release_v09_of_mtmate_matchthread_generator/)*")
                 if threadStatus == 2: # before kickoff
@@ -992,9 +990,10 @@ def updateThreads():
         # detect if finished
         if getStatus(matchID) == 'FT' or getStatus(matchID) == 'AET':
             finished = True
-        elif getStatus(matchID) == 'PEN':
+        elif getStatus(matchID) == 'FT-Pens' or getStatus(matchID) == 'PEN':
             info = getExtraInfo(matchID)
-            if 'won' in info or 'win' in info:
+            print(info)
+            if 'won' in info or 'win' in info or 'advance' in info:
                 finished = True
 
         # update lineups
@@ -1039,6 +1038,7 @@ def updateThreads():
 def findMatchSiteSingle(team):
     # search for each word in each team name in the fixture list, return most frequent result
     print(getTimestamp() + "Finding ESPN site for " + team + "...")
+
     try:
         t1 = team.split()
         linkList = []
@@ -1087,11 +1087,14 @@ def findMatchSiteSingle(team):
 
 def check_spfl_games(attempts, premiership_teams):
     attempts = attempts + 1
-    print("Count {}".format(attempts))
+    msg = "Count {}".format(attempts)
+    print(msg)
+    logger.info(msg)
     # All teams to consider
     all_teams = ["Rangers", "Celtic", "Hibernian", "Aberdeen",
-                         "Kilmarnock", "Dundee United", "Ross County", "Livingston",
-                         "St Johnstone", "Motherwell", "St Mirren", "Hamilton Academical"]
+                 "Kilmarnock", "Dundee United", "Ross County", "Livingston",
+                 "St Johnstone", "Motherwell", "St Mirren", "Hamilton Academical",
+                 "Scotland"]
 
     active_teams = []
     # dont check for any team who's already in a thread
@@ -1103,6 +1106,11 @@ def check_spfl_games(attempts, premiership_teams):
             all_teams.remove(t1)
         if t2 in all_teams:
             all_teams.remove(t2)
+            
+        if t1 in premiership_teams.keys():
+            del premiership_teams[t1]
+        if t2 in premiership_teams.keys():
+            del premiership_teams[t2]
 
     # see if any games are less than an hour away roughly every 30 mins
     if attempts >= 30:
@@ -1121,11 +1129,18 @@ def check_spfl_games(attempts, premiership_teams):
                     # is this game already being tracked / already been detected as being soon?
                     if team not in active_teams and team not in premiership_teams:
                         # is the game finished?
-                        if not (status.startswith('FT') or status == 'AET' or status == 'Postponed'):
-                            # store team and match id
-                            premiership_teams[team] = match_id
+                        if not (status.startswith('FT') or status == 'AET'):
+                            if not status == 'Postponed':
+                                # store team and match id
+                                premiership_teams[team] = match_id
+                                message_bot("Team {} is less than an hour away from playing"
+                                            "(http://www.espn.com/soccer/match?gameId={}).".format(team, match_id))
+
+            print("\n ")
+
 
     print(premiership_teams)
+    logger.info(premiership_teams)
     to_remove = []
     for team in premiership_teams:
         match_id = premiership_teams[team]
@@ -1133,20 +1148,25 @@ def check_spfl_games(attempts, premiership_teams):
         if status == 0:
             to_remove.append(team)
 
-            # if status == 0:  # success
-            #     r.redditor('mf__4').message('Thread Made', "New Match Thread made for {}. ".format(team) +
-            #     "([Here](http://www.reddit.com/r/scottishfootball/comments/{})  is a link ".format(thread_id) +
-            #     "to the thread)")
+            if status == 0:  # success
+                message = "New Match Thread made for {}. ".format(team) + \
+                "(Link to thread: http://www.reddit.com/r/scottishfootball/comments/{})".format(thread_id)
+                message_bot(message)
 
     for added in to_remove:
         del premiership_teams[added]
     return attempts, premiership_teams
 
+def message_bot(message):
+    print(getTimestamp() + "[SENDING TELEGRAM MESSAGE: {}]".format(message))
+    url = "https://api.telegram.org/bot{}/sendMessage?chat_id={}&text={}".format(telegram_bot_token, telegram_owner, message)
+    requests.post(url)
+
 
 attempts = 30
 logger = logging.getLogger('a')
 logger.setLevel(logging.ERROR)
-logfilename = '/home/mark/match-thread-bot/log.log'
+logfilename = 'bot_files/log.log'
 handler = logging.handlers.RotatingFileHandler(logfilename, maxBytes=50000, backupCount=5)
 handler.setLevel(logging.ERROR)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
@@ -1154,8 +1174,10 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 logger.info("[STARTUP]")
 print( getTimestamp() + "[STARTUP]")
-
 r,admin,username,password,subreddit,user_agent,id,secret,redirect = setup()
+telegram_bot_token = sys.argv[9]
+telegram_owner = sys.argv[10]
+message_bot("Bot starting.")
 readData()
 
 if len(sys.argv) > 1:
@@ -1170,6 +1192,7 @@ while running:
         attempts, teams = check_spfl_games(attempts, teams)
         updateThreads()
         print(getTimestamp() + "[SLEEPING FOR 60 SECONDS]")
+        logger.info(getTimestamp() + "[SLEEPING FOR 60 SECONDS]")
         sleep(60)
     except KeyboardInterrupt:
         logger.info("[MANUAL SHUTDOWN]")

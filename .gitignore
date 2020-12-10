@@ -1,7 +1,7 @@
 login.txt
-active_threads.txt
-log.*
+bot_files/*
 venv*
 .idea/*
 *~
-*.service
+*.sh
+*.env
