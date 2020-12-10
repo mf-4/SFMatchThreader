@@ -755,7 +755,7 @@ def deleteThread(id):
                 thread.delete()
                 activeThreads.remove(data)
                 logger.info("Active threads: %i - removed %s vs %s (/r/%s)", len(activeThreads), team1, team2, sub)
-                print( getTimestamp() + "Active threads: " + str(len(activeThreads)) + " - removed " + team1 + " vs " + team2 + " (/r/" + sub + ")")
+                print(getTimestamp() + "Active threads: " + str(len(activeThreads)) + " - removed " + team1 + " vs " + team2 + " (/r/" + sub + ")")
                 saveData()
                 return team1 + ' vs ' + team2
         return ''
@@ -777,7 +777,7 @@ def removeWrongThread(id,req):
                 thread.delete()
                 activeThreads.remove(data)
                 logger.info("Active threads: %i - removed %s vs %s (/r/%s)", len(activeThreads), team1, team2, sub)
-                print( getTimestamp() + "Active threads: " + str(len(activeThreads)) + " - removed " + team1 + " vs " + team2 + " (/r/" + sub + ")")
+                print(getTimestamp() + "Active threads: " + str(len(activeThreads)) + " - removed " + team1 + " vs " + team2 + " (/r/" + sub + ")")
                 saveData()
                 return team1 + ' vs ' + team2
         return 'thread'
@@ -802,7 +802,7 @@ def firstTryTeams(msg):
 def checkAndCreate():
     print(getTimestamp() + "[Checking messages]")
     if len(activeThreads) > 0:
-        print( getTimestamp() + "Checking messages...")
+        print(getTimestamp() + "Checking messages...")
     delims = [' x ',' - ',' v ',' vs ']
     subdel = ' for '
     for msg in r.inbox.unread(mark_read=False):
@@ -822,7 +822,7 @@ def checkAndCreate():
             # euroteams = ['italy','republic of ireland','ireland','sweden','belgium','iceland','austria','hungary','portugal','switzerland','poland','croatia','wales','germany','spain','france','england']
             # if teams[0].lower() in euroteams or teams[1].lower() in euroteams:
             # msg.reply("Sorry, this bot can't be used for Euro 2016 matches. [Look here](https://www.reddit.com/r/soccer/wiki/matchthreads) for templates, tips, and example match threads from the past if you want to know how to you make your own match thread!\n\n--------------\n\n[^Why ^doesn't ^the ^bot ^work ^for ^Euro ^2016?](https://www.reddit.com/r/soccer/comments/4oun18/match_thread_switzerland_vs_france_euro_2016/d4fn9n8)")
-            # print( getTimestamp() + "Denied a Euro 2016 thread: " + msg.body)
+            # print(getTimestamp() + "Denied a Euro 2016 thread: " + msg.body)
             #else:
             threadStatus,thread_id = createNewThread(teams[0],teams[1],msg.author,sub, '')
             if messaging:
@@ -879,7 +879,7 @@ def checkAndCreate():
                     else:
                         msg.reply("Deleted " + name)
     if len(activeThreads) > 0:
-        print( getTimestamp() + "All messages checked.")
+        print(getTimestamp() + "All messages checked.")
 
 def getExtraInfo(matchID):
 	try:
@@ -1032,7 +1032,7 @@ def updateThreads():
     for getRid in toRemove:
         activeThreads.remove(getRid)
         logger.info("Active threads: %i - removed %s vs %s (/r/%s)", len(activeThreads), getRid[1], getRid[2], getRid[5])
-        print( getTimestamp() + "Active threads: " + str(len(activeThreads)) + " - removed " + getRid[1] + " vs " + getRid[2] + " (/r/" + getRid[5] + ")")
+        print(getTimestamp() + "Active threads: " + str(len(activeThreads)) + " - removed " + getRid[1] + " vs " + getRid[2] + " (/r/" + getRid[5] + ")")
         saveData()
 
 def findMatchSiteSingle(team):
@@ -1173,7 +1173,7 @@ formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 logger.info("[STARTUP]")
-print( getTimestamp() + "[STARTUP]")
+print(getTimestamp() + "[STARTUP]")
 r,admin,username,password,subreddit,user_agent,id,secret,redirect = setup()
 telegram_bot_token = sys.argv[9]
 telegram_owner = sys.argv[10]
@@ -1196,18 +1196,18 @@ while running:
         sleep(60)
     except KeyboardInterrupt:
         logger.info("[MANUAL SHUTDOWN]")
-        print( getTimestamp() + "[MANUAL SHUTDOWN]\n")
+        print(getTimestamp() + "[MANUAL SHUTDOWN]\n")
         running = False
     #except praw.exceptions.OAuthException as e:
     #        logger.exception("[OAuthException:]")
     #        logger.exception(str(e))
     except AssertionError:
-        print( getTimestamp() + "Assertion error, refreshing login")
+        print(getTimestamp() + "Assertion error, refreshing login")
         r.clear_authentication()
         r.set_oauth_app_info(client_id=id,client_secret=secret,redirect_uri=redirect)
         OAuth_login()
     except praw.exceptions.APIException as e:
-        print( getTimestamp() + "API error, check log file")
+        print(getTimestamp() + "API error, check log file")
         logger.exception("[API ERROR:]")
         logger.exception(str(e))
         sleep(60)
@@ -1217,7 +1217,7 @@ while running:
         logger.exception(str(e))
         sleep(60)
     except Exception as e:
-        print( getTimestamp() + "Unknown error, check log file")
+        print(getTimestamp() + "Unknown error, check log file")
         logger.exception('[UNKNOWN ERROR:]')
         logger.exception(str(e))
         sleep(60)
