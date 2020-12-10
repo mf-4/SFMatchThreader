@@ -824,7 +824,7 @@ def checkAndCreate():
             # msg.reply("Sorry, this bot can't be used for Euro 2016 matches. [Look here](https://www.reddit.com/r/soccer/wiki/matchthreads) for templates, tips, and example match threads from the past if you want to know how to you make your own match thread!\n\n--------------\n\n[^Why ^doesn't ^the ^bot ^work ^for ^Euro ^2016?](https://www.reddit.com/r/soccer/comments/4oun18/match_thread_switzerland_vs_france_euro_2016/d4fn9n8)")
             # print(getTimestamp() + "Denied a Euro 2016 thread: " + msg.body)
             #else:
-            threadStatus,thread_id = createNewThread(teams[0],teams[1],msg.author,sub, '')
+            threadStatus,thread_id = createNewThread(teams[0], teams[1], msg.author, sub, '')
             if messaging:
                 if threadStatus == 0: # thread created successfully
                     msg.reply("[Here](http://www.reddit.com/r/" + sub + "/comments/" + thread_id + ") is a link to the thread you've requested. Thanks for using this bot!\n\n-------------------------\n\n*Did I create a thread for the wrong match? [Click here and press send](http://www.reddit.com/message/compose/?to=" + username + "&subject=delete&message=" + thread_id + ") to delete the thread (note: this will only work within five minutes of the thread's creation). This probably means that I can't find the right match - sorry!*")
