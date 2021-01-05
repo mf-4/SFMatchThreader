@@ -2,10 +2,11 @@
 # -*- coding: utf-8 -*-
 
 import praw,urllib,http.cookiejar,re,logging,logging.handlers,datetime,requests,requests.auth,sys,json,unicodedata
+import prawcore.exceptions as praw_exception
 from collections import Counter
 from itertools import groupby
 from time import sleep
-
+from bs4 import BeautifulSoup
 
 # TO DO: 
 #  cookielib to http.cookiejar
@@ -35,7 +36,7 @@ usrblacklist = ['dbawbaby',
 
 # allowed to make multiple threads, me and r/scottishfootball mods
 usrwhitelist = ['mf__4', 'sfmatchthreadder'
-                'dodidodidodidodi', 'That_Naked_Guy', 'jaaykidd', 'cammymd',
+                'dodidodidodidodi', 'That_Naked_Guy', 'cptEs', 'Tito1872', 'cammymd',
                 'Bo98', 'MrMaggot98', 'methylated_spirit', 'D6P6', 'GreenLightDistrictJP']
 
 # markup constants
@@ -46,25 +47,32 @@ custTimeLimit = {'sfmatchthreads': [10]}
 
 # no time limit to when user can post in specific subreddit
 timewhitelist = {'sfmatchthreads': ['mf__4']}
-
+# timewhitelist = {}
 def getTimestamp():
-    dt = str(datetime.datetime.now().month) + '/' + str(datetime.datetime.now().day) + ' '
+    day = str(datetime.datetime.now().day) if len(str(datetime.datetime.now().day)) > 1 else '0' + str(datetime.datetime.now().day)
+    month = str(datetime.datetime.now().month) if len(str(datetime.datetime.now().month)) > 1 else '0' + str(datetime.datetime.now().month)
+    year = str(datetime.datetime.now().year) if len(str(datetime.datetime.now().year)) != 4 else str(datetime.datetime.now().year)[-2:]
+
+    dt = day + '/' + month + '/' + year + ' '
     hr = str(datetime.datetime.now().hour) if len(str(datetime.datetime.now().hour)) > 1 else '0' + str(datetime.datetime.now().hour)
     min = str(datetime.datetime.now().minute) if len(str(datetime.datetime.now().minute)) > 1 else '0' + str(datetime.datetime.now().minute)
-    t = '[' + hr + ':' + min + '] '
+    sec = str(datetime.datetime.now().second) if len(str(datetime.datetime.now().second)) > 1 else '0' + str(datetime.datetime.now().second)
+    t = '[' + hr + ':' + min + ':' + sec + '] '
     return dt + t
 
 def setup():
     try:
-        print(tuple(sys.argv[1:9]))
+        log_information("Reddit details from argv are {}".format(tuple(sys.argv[1:9])),
+                        level=logging.DEBUG)
         admin,username,password,subreddit,user_agent,id,secret,redirect = tuple(sys.argv[1:9])
 
-        print(admin)
+        log_information("ADMIN: {}".format(admin),
+                        level=logging.DEBUG)
         r = praw.Reddit(client_id=id, client_secret=secret, username=username, password=password, user_agent=user_agent)
         return r,admin,username,password,subreddit,user_agent,id,secret,redirect
     except:
-        print(getTimestamp() + "Setup error: please ensure environment variables exists in its correct form (check readme for more info)\n")
-        logger.exception("[SETUP ERROR:]")
+        log_information("Setup error: please ensure environment variables exists in its correct form (check readme for more info)",
+                        level=logging.CRITICAL)
         sleep(10)
 
 # deprecated                
@@ -77,17 +85,19 @@ def OAuth_login():
         token_data = response.json( )
         all_scope = set(['identity','edit','flair','history','mysubreddits','privatemessages','read','save','submit','vote','wikiread'])
         r.set_access_credentials( all_scope, token_data[ 'access_token' ])
-        print(getTimestamp() + "OAuth session opened as /u/" + r.get_me().name)
+        log_information("OAuth session opened as /u/" + r.get_me().name,
+                        level=logging.INFO)
     except:
-        print(getTimestamp() + "OAuth error, check log file")
-        logger.exception("[OAUTH ERROR:]")
+        log_information("OAuth error, check log file",
+                        level=logging.CRITICAL)
         sleep(10)
 
 # save activeThreads
 def saveData():
     f = open('bot_files/active_threads.txt', 'w+')
     s = ''
-    print("Saving data")
+    log_information("Saving active threads data",
+                    level=logging.INFO)
     for data in activeThreads:
         matchID,t1,t2,thread_id,reqr,sub = data
         if type(reqr) is not str:
@@ -99,26 +109,30 @@ def saveData():
 
 # read saved activeThreads data        
 def readData():
-    print("Reading in data from file")
+    log_information("Reading in active threads from file",
+                    level=logging.INFO)
     f = open('bot_files/active_threads.txt', 'r')
     s = f.read()
-    print("Content recived is: {}".format(s))
+    log_information("Active threads read in from file is: {}".format(s),
+                    level=logging.INFO)
     info = s.split('&&&&')
     if info[0] != '':
         for d in info:
             [matchID,t1,t2,thread_id,reqr,sub] = d.split('####')
             data = matchID, t1, t2, thread_id, reqr, sub
             activeThreads.append(data)
-            logger.info("Active threads: %i - added %s vs %s (/r/%s)", len(activeThreads), t1, t2, sub)
-            print(getTimestamp() + "Active threads: " + str(len(activeThreads)) + " - added " + t1 + " vs " + t2 + " (/r/" + sub + ")")
+            log_information("Active threads: {} - added {} vs {} (/r/{})"
+                            "".format(str(len(activeThreads)), t1, t2, sub),
+                            level=logging.INFO)
     f.close()
 
 def resetAll():
     removeList = list(activeThreads)
     for data in removeList:
         activeThreads.remove(data)
-        logger.info("Active threads: %i - removed %s vs %s (/r/%s)", len(activeThreads), data[1], data[2], data[5])
-        print(getTimestamp() + "Active threads: " + str(len(activeThreads)) + " - removed " + data[1] + " vs " + data[2] + " (/r/" + data[5] + ")")
+        log_information("Active threads: {} - removed {} vs {} (/r/{})"
+                        "".format(str(len(activeThreads)), data[1], data[2], data[5]),
+                        level=logging.INFO)
         saveData()
 
 def loadMarkup(subreddit):
@@ -164,11 +178,6 @@ def getRelatedSubreddits():
     subs = [x.lower() for x in subs]
     return subs
 
-def getBotStatus():
-    thread = r.submission(id = '22ah8i')
-    status = re.findall('bar-10-(.*?)\)',thread.selftext)
-    msg = re.findall('\| \*(.*?)\*',thread.selftext)
-    return status[0],msg[0]
 
 def remove_accents(input_str):
     nfkd_form = unicodedata.normalize('NFKD', input_str)
@@ -251,11 +260,135 @@ def findScoreSide(time,left,right):
         return 'right'
     return 'none'
 
+def findBBCSiteSingle(team1, team2):
+    # search for each word in each team name in the fixture list, return most frequent result
+    log_information("Finding BBC site for {} vs {}...".format(team1, team2),
+                    level=logging.INFO)
+    allTeams = {}
+    try:
+        linkList = []
+        fixAddress = "https://www.bbc.co.uk/sport/football/scores-fixtures"
+        fixWebsite = requests.get(fixAddress, timeout=15, stream=True)
+        fix_html = fixWebsite.text
+
+
+        html = BeautifulSoup(fix_html, 'html.parser')
+
+
+        possible = []
+
+        all_leagues = html.find_all("div", {"class": "qa-match-block"})
+        for league in all_leagues:
+            games = league.find_all('li')
+            for game in games:
+                if "Match postponed".lower() in game.text.lower():
+                    log_information("Match {} Postponed, skipping".format(game.text),
+                                    level=logging.DEBUG)
+                    continue
+                teams = game.find_all("span", {"class": 'sp-c-fixture__team-name-wrap'})
+                home = teams[0].find("span")
+                away = teams[1].find("span")
+                link = game.find_all("a", href=True)
+                if len(link) > 1:
+                    log_information("MORE THAN ONE LINK ON BBC PAGE FOR {} vs {}".format(home.text, away.text),
+                                    level=logging.ERROR)
+                elif len(link) > 0:
+                    link = link[0]
+                else:
+                    # print("SKIPPING {} vs {}. NO LINK".format(home.text, away.text))
+                    continue
+                matchId = re.findall("/sport/football/(.*)", link['href'])
+
+                if len(matchId) > 1:
+                    log_information("MORE THAN ONE MATCHID ON BBC PAGE FOR {} vs {}".format(home.text, away.text),
+                                    level=logging.ERROR)
+                else:
+                    matchId = matchId[0]
+
+                if home is None or away is None:
+                    if teams is None:
+                        log_information("BBC PAGE ERROR. TEAMS, HOME AND AWAY ARE NONE",
+                                        level=logging.ERROR)
+                    else:
+                        log_information("BBC PAGE ERROR. HOME OR AWAY TEAM FOR {} IS NONE".format(teams.text),
+                                        level=logging.ERROR)
+                    continue
+
+                allTeams[matchId] = (home.text, away.text)
+
+                if remove_accents(team1).lower() == remove_accents(home.text).lower() and remove_accents(team2).lower() == remove_accents(away.text).lower():
+                    possible.append(matchId)
+
+                if remove_accents(team1).lower() == remove_accents(away.text).lower() and remove_accents(team2).lower() == remove_accents(home.text).lower():
+                    possible.append(matchId)
+
+        if len(possible) == 1:
+            h, a = allTeams[possible[0]]
+            return possible[0],h,a
+        else:
+            return -1,"",""
+    except Exception:
+        return -1,"",""
+    except requests.exceptions.Timeout:
+        log_information("BBC access timeout",
+                        level=logging.ERROR)
+        return 'no match'
+
+
+
+def grabStats(t1, t2):
+    bbcID, t1, t2 = findBBCSiteSingle(t1, t2)
+    if bbcID == -1:
+        log_information("FAILED TO GET STATS FOR {} vs {}".format(t1, t2),
+                        level=logging.ERROR)
+        return ""
+    lineAddress = "https://www.bbc.co.uk/sport/football/{}".format(bbcID)
+    lineWebsite = requests.get(lineAddress, timeout=15, stream=True)
+    line_html = lineWebsite.text
+    try:
+        if lineWebsite.status_code == 200:
+            body = '\n\n---------\n\n'
+            body += '**MATCH STATS** | *via [BBC]({})* | '.format(lineAddress)
+            body += '*^(in testing, might not work properly)*\n\n'
+            body += "||{}|{}|\n|:--|:--:|:--:|\n".format(t1, t2)
+            data = []
+            html = BeautifulSoup(line_html, 'html.parser')
+
+
+            match_stats = html.find("div", {"class": "sp-c-football-match-stats"})
+            match_stats_table = match_stats.find('dl')
+            rows = match_stats_table.find_all('dl')
+            for row in rows:
+                heading = row.find("dt").text
+
+                numbers = re.findall("[^\d]*(\d+)[^\d]*(\d+).*", row.text)[0]
+                home, away = numbers
+                # give possession a %
+                if heading.lower() == "Possession".lower():
+                    home = home + "%"
+                    away = away + "%"
+                data.append([heading, home, away])
+
+            for d in data:
+                body+="|"+d[0]+"|"+d[1]+"|"+d[2]+"|\n"
+
+            # print_text("complete.")
+            return body
+
+        else:
+            log_information("STATS EDIT BAD WEBPAGE STATUS CODE",
+                            level=logging.WARNING)
+            return ""
+    except:
+        log_information("STATS EDIT FAILED",
+                        level=logging.WARNING)
+        return ""
+
 
 def grabEvents(matchID, sub):
     markup = loadMarkup(sub)
     lineAddress = "http://www.espn.com/soccer/commentary?gameId=" + matchID
-    #	print getTimestamp() + "Grabbing events from " + lineAddress + "...",
+
     lineWebsite = requests.get(lineAddress, timeout=15, stream=True)
     line_html = lineWebsite.text
     try:
@@ -294,15 +427,17 @@ def grabEvents(matchID, sub):
                         info += markup[subst] + ' ' + re.sub('<.*?>', '', event)
                     body += info + '\n\n'
 
-            # print("complete.")
+            log_information("GRAB EVENTS COMPLETED",
+                            level=logging.DEBUG)
             return body
 
         else:
-            # print("failed.")
+            log_information("GRAB EVENTS BAD WEBPAGE STATUS CODE",
+                            level=logging.ERROR)
             return ""
     except:
-        # print("edit failed")
-        logger.exception('[EDIT ERROR:]')
+        log_information("GRAB EVENTS FAILED",
+                        level=logging.ERROR)
         return ""
 
 def getTimes(ko):
@@ -316,15 +451,18 @@ def getTimes(ko):
 
 # attempt submission to subreddit
 def submitThread(sub,title):
-    print(getTimestamp() + "Submitting " + title + "...",end='')
+    log_information("Submitting {}...".format(title),
+                    level=logging.INFO,
+                    end='')
     try:
         thread = r.subreddit(sub).submit(title,selftext='**Venue:**\n\n**LINE-UPS**',send_replies=False)
         # thread = r.subreddit("SFMatchThreads").submit(title,selftext='**Venue:**\n\n**LINE-UPS**',send_replies=False)
-        print("Thread ID: {} submitted.".format(thread))
+        log_information("Thread ID: {} submitted for subreddit r/{}.".format(thread, sub),
+                        level=logging.INFO)
         return True,thread
     except:
-        print("failed.")
-        logger.exception("[SUBMIT ERROR:]")
+        log_information("SUBMIT THREAD FAILED.",
+                        level=logging.CRITICAL)
         return False,''
 
 
@@ -413,7 +551,8 @@ def getLineUps(matchID):
             team2Sub = ["*Not available*"]
             return team1Start, team1Sub, team2Start, team2Sub
     except IndexError:
-        logger.warning("[INDEX ERROR:]")
+        log_information("INDEX ERROR",
+                        level=logging.WARNING)
         team1Start = ["*Not available*"]
         team1Sub = ["*Not available*"]
         team2Start = ["*Not available*"]
@@ -462,7 +601,8 @@ def getTeamIDs(matchID):
 
 def findMatchSite(team1, team2):
     # search for each word in each team name in the fixture list, return most frequent result
-    print(getTimestamp() + "Finding ESPN site for " + team1 + " vs " + team2 + "...")
+    log_information("Finding ESPN site for {} vs {}...".format(team1, team2),
+                    level=logging.DEBUG)
     try:
         t1 = team1.split()
         t2 = team2.split()
@@ -507,13 +647,16 @@ def findMatchSite(team1, team2):
                     mode = guessRightMatch(possibles)
                 else:
                     mode = possibles[0]
-            print("Found match.")
+                log_information("Found match for {} vs {}.".format(team1, team2),
+                                level=logging.DEBUG)
             return mode
         else:
-            print("Cannot find match")
+            log_information("Cannot find match for {} vs {}.".format(team1, team2),
+                            level=logging.WARNING)
             return 'no match'
     except requests.exceptions.Timeout:
-        print("ESPN access timeout")
+        log_information("ESPN access timeout",
+                        level=logging.WARNING)
         return 'no match'
 
 
@@ -532,44 +675,39 @@ def createNewThread(team1, team2, reqr, sub, direct):
                     matchID)
                 gotinfo = True
             except requests.exceptions.Timeout:
-                print(getTimestamp() + "ESPNFC access timeout for " + team1 + " vs " + team2)
+                log_information("ESPNFC access timeout for {} vs {}.".format(team1, team2),
+                                level=logging.WARNING)
 
-        botstat, statmsg = getBotStatus()
-        # don't make a post if there's some fatal error
-        if botstat == 'red':
-            print(getTimestamp() + "Denied " + t1 + " vs " + t2 + " request for - status set to red")
-            logger.info("Denied %s vs %s request - status set to red", t1, t2)
-            return 8, ''
 
         # only post to related subreddits
         relatedsubs = getRelatedSubreddits()
         if sub.lower() not in relatedsubs:
-            print(getTimestamp() + "Denied post request to /r/" + sub + " - not related")
-            logger.info("Denied post request to %s - not related", sub)
+            log_information("Denied post request to /r/{} - not related".format(sub),
+                            level=logging.WARNING)
             return 6, ''
 
         # don't post if user is blacklisted
         if reqr in usrblacklist:
-            print(getTimestamp() + "Denied post request from /u/" + reqr + " - blacklisted")
-            logger.info("Denied post request from %s - blacklisted", reqr)
+            log_information("Denied post request from /u/{} - blacklisted".format(reqr),
+                            level=logging.WARNING)
             return 9, ''
 
         # don't create a thread if the bot already made it or if user already has an active thread
         for d in activeThreads:
             matchID_at, t1_at, t2_at, id_at, reqr_at, sub_at = d
             if t1 == t1_at and sub == sub_at:
-                print(getTimestamp() + "Denied " + t1 + " vs " + t2 + " request for /r/" + sub + " - thread already exists")
-                logger.info("Denied %s vs %s request for %s - thread already exists", t1, t2, sub)
+                log_information("Denied {} vs {} request for /r/{} - thread already exists".format(t1, t2, sub),
+                                level=logging.INFO)
                 return 4, id_at
             if reqr == reqr_at and reqr not in usrwhitelist:
-                print(getTimestamp() + "Denied post request from /u/" + reqr + " - has an active thread request")
-                logger.info("Denied post request from %s - has an active thread request", reqr)
+                log_information("Denied post request from /u/{} - has an active thread request".format(reqr),
+                                level=logging.WARNING)
                 return 7, ''
 
         # don't create a thread if the match is done (probably found the wrong match) or postponed
         if status.startswith('FT') or status == 'AET' or status == 'Postponed':
-            print(getTimestamp() + "Denied " + t1 + " vs " + t2 + " request - match appears to be finished")
-            logger.info("Denied %s vs %s request - match appears to be finished", t1, t2)
+            log_information("Denied {} vs {} request - match appears to be finished".format(t1, t2),
+                            level=logging.INFO)
             return 3, ''
 
         timelimit = 5
@@ -582,20 +720,21 @@ def createNewThread(team1, team2, reqr, sub, direct):
             sub.lower()]:
             hour_i, min_i, now = getTimes(ko_time)
             now_f = now + datetime.timedelta(hours=0, minutes=timelimit)  # timezone
-            print("Allowed Time: {}; Game Time: {}".format(now_f, ko_time))
+            log_information("Allowed Time: {}; Game Time: {}".format(now_f, ko_time),
+                            level=logging.DEBUG)
             if ko_day == '':
                 return 1, ''
             if now_f.day < int(ko_day):
-                print(getTimestamp() + "Denied " + t1 + " vs " + t2 + " request - more than {} minutes to kickoff".format(timelimit))
-                logger.info("Denied %s vs %s request - more than {} minutes to kickoff".format(timelimit), t1, t2)
+                log_information("Denied {} vs {} request - more than {} minutes to kickoff".format(t1, t2, timelimit),
+                                level=logging.INFO)
                 return 2, ''
             if now_f.hour < hour_i:
-                print(getTimestamp() + "Denied " + t1 + " vs " + t2 + " request - more than {} minutes to kickoff".format(timelimit))
-                logger.info("Denied %s vs %s request - more than {} minutes to kickoff".format(timelimit), t1, t2)
+                log_information("Denied {} vs {} request - more than {} minutes to kickoff".format(t1, t2, timelimit),
+                                level=logging.INFO)
                 return 2, ''
             if (now_f.hour == hour_i) and (now_f.minute < min_i):
-                print(getTimestamp() + "Denied " + t1 + " vs " + t2 + " request - more than {} minutes to kickoff".format(timelimit))
-                logger.info("Denied %s vs %s request - more than {} minutes to kickoff".format(timelimit), t1, t2)
+                log_information("Denied {} vs {} request - more than {} minutes to kickoff".format(t1, t2, timelimit),
+                                level=logging.INFO)
                 return 2, ''
 
         # competition logic, go here to remove friendly games when i know what it looks like
@@ -606,6 +745,22 @@ def createNewThread(team1, team2, reqr, sub, direct):
             title = title + ' | ' + comp
         result, thread = submitThread(sub, title)
 
+        # try and set the flair to "Match Thread" if possible
+        try:
+            flairs = thread.flair.choices()
+            log_information("Available flairs are {}".format(str(flairs)),
+                            level=logging.DEBUG)
+
+            flair_id = -1
+            for flair in flairs:
+                if 'Match Thread'.lower() == flair['flair_text'].lower():
+                    flair_id = flair['flair_template_id']
+
+            if flair_id != -1:
+                thread.flair.select(flair_id)
+        except praw_exception.Forbidden:
+            log_information("Flairs not allowed on this subreddit (r/{})".format(sub),
+                            level=logging.INFO)
         # if subreddit was invalid, notify
         if result == False:
             return 5, ''
@@ -620,9 +775,9 @@ def createNewThread(team1, team2, reqr, sub, direct):
 
         activeThreads.append(data)
         saveData()
-        print(getTimestamp() + "Active threads: " + str(
-            len(activeThreads)) + " - added " + t1 + " vs " + t2 + " (/r/" + sub + ")")
-        logger.info("Active threads: %i - added %s vs %s (/r/%s)", len(activeThreads), t1, t2, sub)
+        log_information("Active threads: {} - added {} vs {} (/r/{})"
+                        "".format(str(len(activeThreads)), t1, t2, sub),
+                        level=logging.INFO)
 
         if status == 'v':
             status = "0'"
@@ -637,28 +792,30 @@ def createNewThread(team1, team2, reqr, sub, direct):
         body += markup[lines] + ' '
         body = writeLineUps(sub, body, t1, t1id, t2, t2id, team1Start, team1Sub, team2Start, team2Sub)
 
+        # add stats
+        body += grabStats(t1, t2)
+
         # "[^[Request ^a ^match ^thread]](http://www.reddit.com/message/compose/?to=SFMatchThreadder&subject=Match%20Thread&message=Team%20vs%20Team)"
         body += '\n\n------------\n\n' + markup[
             evnts] + ' **MATCH EVENTS** | *via [ESPN](http://www.espn.com/soccer/match?gameId=' + matchID + ')*\n\n'
         body += "\n\n--------\n\n*^(Don't see a thread for a match you're watching?) [^(Click here)](https://www.reddit.com/r/soccer/wiki/matchthreads#wiki_match_thread_bot) ^(to learn how to request a match thread from this bot.)*"
 
-        if botstat != 'green':
-            body += '*' + statmsg + '*\n\n'
 
         thread.edit(body)
         sleep(5)
 
         return 0, t_id
     else:
-        print(getTimestamp() + "Could not find match info for " + team1 + " vs " + team2)
-        logger.info("Could not find match info for %s vs %s", team1, team2)
+        log_information("Could not find match info for {} vs {}".format(team1, team2),
+                        level=logging.WARNING)
         return 1, ''
 
 
 # get venue, ref, lineups, etc from ESPN
 def getMatchInfo(matchID):
     lineAddress = "http://www.espn.com/soccer/match?gameId=" + matchID
-    print(getTimestamp() + "Finding ESPN info from " + lineAddress + "...")
+    log_information("Finding ESPN info from {}...".format(lineAddress),
+                    level=logging.DEBUG)
     lineWebsite = requests.get(lineAddress, timeout=15, stream=True)
     line_html = lineWebsite.text
 
@@ -699,7 +856,8 @@ def getMatchInfo(matchID):
         comp = ''
 
     team1Start, team1Sub, team2Start, team2Sub = getLineUps(matchID)
-    print("complete.")
+    log_information("Match info gathered for {} vs {}.".format(t1abb, t2abb),
+                    level=logging.DEBUG)
     return (
     team1fix, t1id, team2fix, t2id, team1Start, team1Sub, team2Start, team2Sub, venue, ko_day, ko_time, status, comp,
     t1abb, t2abb)
@@ -736,8 +894,8 @@ def createMatchInfo(team1, team2):
 
         body += '\n\n------------\n\n' + markup[evnts] + ' **MATCH EVENTS**\n\n'
 
-        logger.info("Provided info for %s vs %s", t1, t2)
-        print(getTimestamp()) + "Provided info for " + t1 + " vs " + t2
+        log_information("Created template for " + t1 + " vs " + t2,
+                        level=logging.INFO)
         return 0, body
     else:
         return 1, ''
@@ -754,8 +912,9 @@ def deleteThread(id):
             if thread_id == id:
                 thread.delete()
                 activeThreads.remove(data)
-                logger.info("Active threads: %i - removed %s vs %s (/r/%s)", len(activeThreads), team1, team2, sub)
-                print(getTimestamp() + "Active threads: " + str(len(activeThreads)) + " - removed " + team1 + " vs " + team2 + " (/r/" + sub + ")")
+                log_information("Active threads: {} - removed {} vs {} (/r/{})"
+                                "".format(str(len(activeThreads)), team1, team2, sub),
+                                level=logging.INFO)
                 saveData()
                 return team1 + ' vs ' + team2
         return ''
@@ -776,8 +935,9 @@ def removeWrongThread(id,req):
                     return 'time'
                 thread.delete()
                 activeThreads.remove(data)
-                logger.info("Active threads: %i - removed %s vs %s (/r/%s)", len(activeThreads), team1, team2, sub)
-                print(getTimestamp() + "Active threads: " + str(len(activeThreads)) + " - removed " + team1 + " vs " + team2 + " (/r/" + sub + ")")
+                log_information("Active threads: {} - removed {} vs {} (/r/{})"
+                                "".format(str(len(activeThreads)), team1, team2, sub),
+                                level=logging.INFO)
                 saveData()
                 return team1 + ' vs ' + team2
         return 'thread'
@@ -800,15 +960,14 @@ def firstTryTeams(msg):
 
 # check for new mail, create new threads if needed
 def checkAndCreate():
-    print(getTimestamp() + "[Checking messages]")
-    if len(activeThreads) > 0:
-        print(getTimestamp() + "Checking messages...")
+    log_information("Checking inbox...",
+                    level=logging.INFO)
     delims = [' x ',' - ',' v ',' vs ']
     subdel = ' for '
     for msg in r.inbox.unread(mark_read=False):
         sub = subreddit
-        msg.mark_read()
         if msg.subject.lower() == 'match thread':
+            msg.mark_read()
             subreq = msg.body.split(subdel,2)
             if subreq[0] != msg.body:
                 sub = subreq[1].split('/')[-1]
@@ -822,7 +981,7 @@ def checkAndCreate():
             # euroteams = ['italy','republic of ireland','ireland','sweden','belgium','iceland','austria','hungary','portugal','switzerland','poland','croatia','wales','germany','spain','france','england']
             # if teams[0].lower() in euroteams or teams[1].lower() in euroteams:
             # msg.reply("Sorry, this bot can't be used for Euro 2016 matches. [Look here](https://www.reddit.com/r/soccer/wiki/matchthreads) for templates, tips, and example match threads from the past if you want to know how to you make your own match thread!\n\n--------------\n\n[^Why ^doesn't ^the ^bot ^work ^for ^Euro ^2016?](https://www.reddit.com/r/soccer/comments/4oun18/match_thread_switzerland_vs_france_euro_2016/d4fn9n8)")
-            # print(getTimestamp() + "Denied a Euro 2016 thread: " + msg.body)
+            # print_text("Denied a Euro 2016 thread: " + msg.body)
             #else:
             threadStatus,thread_id = createNewThread(teams[0], teams[1], msg.author, sub, '')
             if messaging:
@@ -879,7 +1038,8 @@ def checkAndCreate():
                     else:
                         msg.reply("Deleted " + name)
     if len(activeThreads) > 0:
-        print(getTimestamp() + "All messages checked.")
+        log_information("All messages checked.",
+                        level=logging.INFO)
 
 def getExtraInfo(matchID):
 	try:
@@ -959,19 +1119,6 @@ def updateScore(matchID, t1, t2, sub):
         return '#**--**\n\n'
 
 
-def createPMT(sub, title, body):
-    print(getTimestamp() + "Submitting PMT for " + title + "...")
-    try:
-        # thread = r.subreddit('sfmatchthreads').submit('Post ' + title, selftext=body, send_replies=False)
-        thread = r.subreddit(sub).submit('Post ' + title, selftext=body, send_replies=False)
-        print("complete.")
-        return True, thread
-    except:
-        print("failed.")
-        logger.exception("[SUBMIT ERROR:]")
-        return False, ''
-
-
 # update all current threads
 def updateThreads():
     toRemove = []
@@ -983,7 +1130,8 @@ def updateThreads():
         thread = r.submission(id=thread_id)
         body = thread.selftext
 
-        print("Status: {}".format(getStatus(matchID)))
+        log_information("Status for {} v {}: {}".format(team1, team2, getStatus(matchID)),
+                        level=logging.DEBUG)
         venueIndex = body.index('**Venue:**')
 
         markup = loadMarkup(subreddit)
@@ -992,7 +1140,8 @@ def updateThreads():
             finished = True
         elif getStatus(matchID) == 'FT-Pens' or getStatus(matchID) == 'PEN':
             info = getExtraInfo(matchID)
-            print(info)
+            log_information("INFO for {} v {}: {}".format(team1, team2, info),
+                            level=logging.DEBUG)
             if 'won' in info or 'win' in info or 'advance' in info:
                 finished = True
 
@@ -1003,12 +1152,13 @@ def updateThreads():
 
         t1id,t2id = getTeamIDs(matchID)
         newbody = writeLineUps(sub,bodyTilThen,team1,t1id,team2,t2id,team1Start,team1Sub,team2Start,team2Sub)
+
+        # add stats
+        newbody += grabStats(team1, team2)
+
         newbody += '\n\n------------\n\n' + markup[
             evnts] + ' **MATCH EVENTS** | *via [ESPN](http://www.espn.com/soccer/match?gameId=' + matchID + ')*\n\n'
 
-        botstat,statmsg = getBotStatus()
-        if botstat != 'green':
-            newbody += '*' + statmsg + '*\n\n'
 
         # update scorelines
         score = updateScore(matchID, team1, team2, sub)
@@ -1017,10 +1167,20 @@ def updateThreads():
         events = grabEvents(matchID, sub)
         newbody += '\n\n' + events
 
+
+
+        # remove strong tags that happen at own goals
+        if "<strong>" in newbody or "</strong>" in newbody:
+            log_information("Strong tags found. Replacing them.",
+                            level=logging.DEBUG)
+            newbody = newbody.replace("<strong>", "")
+            newbody = newbody.replace("</strong>", "")
+
+
         # save data
         if newbody != body:
-            logger.info("Making edit to %s vs %s (/r/%s)", team1,team2,sub)
-            print(getTimestamp() + "Making edit to " + team1 + " vs " + team2 + " (/r/" + sub + ")")
+            log_information("Making edit to {} vs {} (/r/{})".format(team1, team2, sub),
+                            level=logging.INFO)
             thread.edit(newbody)
             saveData()
         newdata = matchID,team1,team2,thread_id,reqr,sub
@@ -1031,13 +1191,15 @@ def updateThreads():
 
     for getRid in toRemove:
         activeThreads.remove(getRid)
-        logger.info("Active threads: %i - removed %s vs %s (/r/%s)", len(activeThreads), getRid[1], getRid[2], getRid[5])
-        print(getTimestamp() + "Active threads: " + str(len(activeThreads)) + " - removed " + getRid[1] + " vs " + getRid[2] + " (/r/" + getRid[5] + ")")
+        log_information("Active threads: {} - removed {} vs {} (/r/{})"
+                        "".format(str(len(activeThreads)), getRid[1], getRid[2], getRid[5]),
+                        level=logging.INFO)
         saveData()
 
 def findMatchSiteSingle(team):
     # search for each word in each team name in the fixture list, return most frequent result
-    print(getTimestamp() + "Finding ESPN site for " + team + "...")
+    log_information("Finding ESPN site for {}...".format(team),
+                    level=logging.DEBUG)
 
     try:
         t1 = team.split()
@@ -1076,44 +1238,60 @@ def findMatchSiteSingle(team):
                     mode = guessRightMatch(possibles)
                 else:
                     mode = possibles[0]
-            print("complete.")
+            log_information("Found match for {}".format(team),
+                            level=logging.INFO)
             return mode
         else:
-            print("complete.")
+            log_information("No match found for {}".format(team),
+                            level=logging.INFO)
             return 'no match'
     except requests.exceptions.Timeout:
-        print("ESPN access timeout")
+        log_information("ESPN access timeout",
+                        level=logging.WARNING)
         return 'no match'
 
+# r/scottishfootball games
 def check_spfl_games(attempts, premiership_teams):
     attempts = attempts + 1
-    msg = "Count {}".format(attempts)
-    print(msg)
-    logger.info(msg)
+    log_information("r/scottishfootball - COUNT IS {}".format(attempts),
+                    level=logging.INFO)
+
     # All teams to consider
     all_teams = ["Rangers", "Celtic", "Hibernian", "Aberdeen",
                  "Kilmarnock", "Dundee United", "Ross County", "Livingston",
                  "St Johnstone", "Motherwell", "St Mirren", "Hamilton Academical",
                  "Scotland"]
 
+    log_information("r/scottishfootball - ALL TEAMS CONSIDERED: " + str(all_teams),
+                    level=logging.DEBUG)
     active_teams = []
     # dont check for any team who's already in a thread
     for thread in activeThreads:
-        _, t1, t2, _, _, _ = thread
-        active_teams.append(t1)
-        active_teams.append(t2)
-        if t1 in all_teams:
-            all_teams.remove(t1)
-        if t2 in all_teams:
-            all_teams.remove(t2)
-            
-        if t1 in premiership_teams.keys():
-            del premiership_teams[t1]
-        if t2 in premiership_teams.keys():
-            del premiership_teams[t2]
+        _, t1, t2, _, _, sub = thread
+        # only care about scottishfootball threads
+        if sub == "scottishfootball":
+            log_information("r/scottishfootball - FOUND ACTIVE THREAD - {} vs {}".format(t1, t2),
+                            level=logging.DEBUG)
+            active_teams.append(t1)
+            active_teams.append(t2)
+            if t1 in all_teams:
+                all_teams.remove(t1)
+            if t2 in all_teams:
+                all_teams.remove(t2)
+
+            if t1 in premiership_teams.keys():
+                del premiership_teams[t1]
+            if t2 in premiership_teams.keys():
+                del premiership_teams[t2]
+
+            log_information("r/scottishfootball - TEAMS {} & {} NO LONGER CONSIDERED".format(t1, t2),
+                            level=logging.DEBUG)
+
 
     # see if any games are less than an hour away roughly every 30 mins
     if attempts >= 30:
+        log_information("r/scottishfootball - CONSIDERED TEAMS: " + str(all_teams),
+                        level=logging.INFO)
         attempts = 0
         for team in sorted(all_teams):
             match_id = findMatchSiteSingle(team.lower())
@@ -1136,11 +1314,8 @@ def check_spfl_games(attempts, premiership_teams):
                                 message_bot("Team {} is less than an hour away from playing"
                                             "(http://www.espn.com/soccer/match?gameId={}).".format(team, match_id))
 
-            print("\n ")
-
-
-    print(premiership_teams)
-    logger.info(premiership_teams)
+    log_information("r/scottishfootball - TEAMS TO PLAY IN NEXT HOUR: " + str(premiership_teams),
+                    level=logging.INFO)
     to_remove = []
     for team in premiership_teams:
         match_id = premiership_teams[team]
@@ -1153,27 +1328,148 @@ def check_spfl_games(attempts, premiership_teams):
                 "(Link to thread: http://www.reddit.com/r/scottishfootball/comments/{})".format(thread_id)
                 message_bot(message)
 
+
     for added in to_remove:
         del premiership_teams[added]
     return attempts, premiership_teams
 
+# custom subreddit games (eg rangers games for r/rangerfc, celtic games for r/celticfc)
+def check_sub_games(attempts, sub_games):
+    attempts = attempts + 1
+    log_information("custom subreddits - COUNT is {}".format(attempts),
+                    level=logging.DEBUG)
+
+    relevant_subreddit = {"Rangers": 'SFMatchThreads',
+                          "Brentford": 'SFMatchThreads'}
+                 # "Celtic": u'celticfc',
+                 # "Hibernian": u'hibsfc',
+                 # "Aberdeen": u'aberdeenfc',
+                 # "Kilmarnock": u'killie',
+                 # "Dundee United": u'dundeeunited',
+                 # "St Johnstone": u'stjohnstone',
+                 # "Motherwell": u'motherwellfc'}
+
+    log_information("custom subreddits - ALL TEAMS CONSIDERED: " + str(relevant_subreddit),
+                    level=logging.DEBUG)
+    active_teams = []
+    # dont check for any team who's already in a thread
+    for thread in activeThreads:
+        _, t1, t2, _, _, sub = thread
+
+        if sub != "scottishfootball":
+            log_information("{} - FOUND ACTIVE THREAD - {} vs {}".format(sub, t1, t2),
+                            level=logging.DEBUG)
+
+        # is the active thread in the personal subreddit for each team?
+        if t1 in relevant_subreddit.keys():
+            if relevant_subreddit[t1].lower() == sub.lower():
+                active_teams.append(t1)
+                del relevant_subreddit[t1]
+                if t1 in sub_games.keys():
+                    del sub_games[t1]
+
+                log_information("{} - TEAM {} NO LONGER CONSIDERED".format(sub, t1),
+                                level=logging.DEBUG)
+
+        if t2 in relevant_subreddit.keys():
+            if relevant_subreddit[t2].lower() == sub.lower():
+                active_teams.append(t2)
+                del relevant_subreddit[t2]
+                if t2 in sub_games.keys():
+                    del sub_games[t2]
+
+                log_information("{} - TEAM {} NO LONGER CONSIDERED".format(sub, t2),
+                                level=logging.DEBUG)
+
+
+
+    # see if any games are less than an hour away roughly every 30 mins
+    if attempts >= 30:
+        attempts = 0
+        log_information("custom subreddits - CONSIDERED TEAMS: " + str(relevant_subreddit),
+                        level=logging.INFO)
+        for team in sorted(relevant_subreddit.keys()):
+            match_id = findMatchSiteSingle(team.lower())
+            if match_id != 'no match':
+                # only some things matter rn
+                _, _, _, _, _, _, _, _, _, _, ko_time, status, _, _, _ = getMatchInfo(match_id)
+
+                hour_i, min_i, now = getTimes(ko_time)
+                now_f = now + datetime.timedelta(hours=1, minutes=0)
+
+                # is the game in the next hour?
+                if (now_f.hour > hour_i) or ((now_f.hour == hour_i) and (now_f.minute > min_i)):
+                    # is this game already being tracked / already been detected as being soon?
+                    if team not in active_teams and team not in sub_games:
+                        # is the game finished?
+                        if not (status.startswith('FT') or status == 'AET'):
+                            if not status == 'Postponed':
+                                # store team and match id
+                                sub_games[team] = match_id
+                                message_bot("Team {} is less than an hour away from playing for subreddit {} "
+                                            "(http://www.espn.com/soccer/match?gameId={}).".format(team, relevant_subreddit[team], match_id))
+
+    log_information("custom subreddits - TEAMS TO PLAY IN NEXT HOUR: " + str(sub_games),
+                    level=logging.INFO)
+
+    to_remove = []
+    for team in sub_games:
+        match_id = sub_games[team]
+        status, thread_id = createNewThread(team, "", "mf__4", relevant_subreddit[team], match_id)
+        if status == 0:
+            to_remove.append(team)
+
+            if status == 0:  # success
+                message = "New Match Thread made for {} in personal subreddit {}. ".format(team, relevant_subreddit[team]) + \
+                          "(Link to thread: http://www.reddit.com/r/{}/comments/{})".format(relevant_subreddit[team], thread_id)
+                message_bot(message)
+
+    for added in to_remove:
+        del sub_games[added]
+    return attempts, sub_games
+
+
 def message_bot(message):
-    print(getTimestamp() + "[SENDING TELEGRAM MESSAGE: {}]".format(message))
+    log_information("SENDING TELEGRAM MESSAGE: {}".format(message),
+                    level=logging.INFO)
     url = "https://api.telegram.org/bot{}/sendMessage?chat_id={}&text={}".format(telegram_bot_token, telegram_owner, message)
     requests.post(url)
 
+def log_information(message, level=logging.INFO, end="\n"):
+    print(getTimestamp() + "[{}]".format(message), end=end)
+    for match_threader_logger in loggers:
+        match_threader_logger.log(level=level, msg=message)
 
-attempts = 30
-logger = logging.getLogger('a')
-logger.setLevel(logging.ERROR)
-logfilename = 'bot_files/log.log'
-handler = logging.handlers.RotatingFileHandler(logfilename, maxBytes=50000, backupCount=5)
-handler.setLevel(logging.ERROR)
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-logger.addHandler(handler)
-logger.info("[STARTUP]")
-print(getTimestamp() + "[STARTUP]")
+    if level == logging.ERROR:
+        message_bot("ERROR WITH MATCH THREADER: {}".format(message))
+
+    if level == logging.CRITICAL:
+        message_bot("CRITICAL ERROR WITH MATCH THREADER: {}".format(message))
+
+
+
+import os
+# Setup logging
+LOG_FILENAME = "bot_files/logs/"
+os.makedirs(os.path.dirname("bot_files/logs/"), exist_ok=True)
+logging.basicConfig(format='%(asctime)s | %(levelname)s | %(message)s')
+logging_levels = [logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR, logging.CRITICAL]
+loggers = []
+for logger_level in logging_levels:
+    name = logging.getLevelName(logger_level)
+    logger = logging.getLogger(name + " logger")
+    logger.setLevel(logger_level)
+    handler = logging.handlers.RotatingFileHandler(LOG_FILENAME + name + ".LOG",
+                                                   maxBytes=50000,
+                                                   backupCount=5)
+    logger.addHandler(handler)
+    loggers.append(logger)
+
+
+
+log_information("STARTUP",
+                level=logging.INFO)
+
 r,admin,username,password,subreddit,user_agent,id,secret,redirect = setup()
 telegram_bot_token = sys.argv[9]
 telegram_owner = sys.argv[10]
@@ -1185,39 +1481,43 @@ if len(sys.argv) > 1:
         resetAll()
 
 running = True
-teams = {}
+sf_teams = {}
+personal_teams = {}
+sf_attempts = 30
+personal_attempts = 30
 while running:
     try:
         checkAndCreate()
-        attempts, teams = check_spfl_games(attempts, teams)
+        sf_attempts, sf_teams = check_spfl_games(sf_attempts, sf_teams)
+        personal_attempts, personal_teams = check_sub_games(personal_attempts, personal_teams)
         updateThreads()
-        print(getTimestamp() + "[SLEEPING FOR 60 SECONDS]")
-        logger.info(getTimestamp() + "[SLEEPING FOR 60 SECONDS]")
+        log_information(getTimestamp() + "[SLEEPING FOR 60 SECONDS]",
+                        level=logging.INFO)
+
         sleep(60)
     except KeyboardInterrupt:
-        logger.info("[MANUAL SHUTDOWN]")
-        print(getTimestamp() + "[MANUAL SHUTDOWN]\n")
+        log_information("MANUAL SHUTDOWN",
+                        level=logging.INFO)
         running = False
-    #except praw.exceptions.OAuthException as e:
-    #        logger.exception("[OAuthException:]")
-    #        logger.exception(str(e))
     except AssertionError:
-        print(getTimestamp() + "Assertion error, refreshing login")
+        log_information("Assertion error, refreshing login",
+                        level=logging.CRITICAL)
         r.clear_authentication()
         r.set_oauth_app_info(client_id=id,client_secret=secret,redirect_uri=redirect)
         OAuth_login()
     except praw.exceptions.APIException as e:
-        print(getTimestamp() + "API error, check log file")
-        logger.exception("[API ERROR:]")
-        logger.exception(str(e))
+        log_information("API ERROR",
+                        level=logging.CRITICAL)
+        log_information("ERROR: {}".format(str(e)),
+                        level=logging.CRITICAL)
         sleep(60)
     except praw.exceptions.ClientException as e:
-        print(getTimestamp() + "Client error, check log file")
-        logger.exception("[CLIENT ERROR:]")
-        logger.exception(str(e))
+        log_information("CLIENT ERROR",
+                        level=logging.CRITICAL)
+        log_information("ERROR: {}".format(str(e)),
+                        level=logging.CRITICAL)
         sleep(60)
     except Exception as e:
-        print(getTimestamp() + "Unknown error, check log file")
-        logger.exception('[UNKNOWN ERROR:]')
-        logger.exception(str(e))
+        log_information("UNKNOWN ERROR: {}".format(str(e)),
+                        level=logging.CRITICAL)
         sleep(60)
