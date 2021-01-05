@@ -320,6 +320,13 @@ def grabStats(t1, t2):
     lineAddress = "https://www.bbc.co.uk/sport/live/football/{}".format(bbcID)
     lineWebsite = requests.get(lineAddress, timeout=15, stream=True)
     line_html = lineWebsite.text
+
+    # will happen if game isnt live anymore
+    if lineWebsite.status_code == 404:
+        lineAddress = "https://www.bbc.co.uk/sport/football/{}".format(bbcID)
+        lineWebsite = requests.get(lineAddress, timeout=15, stream=True)
+        line_html = lineWebsite.text
+
     try:
         if lineWebsite.status_code == 200:
             body = '\n\n---------\n\n'
