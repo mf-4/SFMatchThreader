@@ -198,27 +198,6 @@ def guessRightMatch(possibles):
         guess = possibles[0]
     return guess
 
-def getSprite(teamID):
-    page = 'matchthreadder1'
-    end = False
-    while not end:
-        try:
-            link = "https://www.reddit.com/r/soccerbot/wiki/%s.json" % page
-            j = r.request_json(link)
-            lookups = json.loads(j.content_md)
-            spritecode = lookups[teamID].split('-')
-            return '[](#sprite' + spritecode[0] + '-p' + spritecode[1] + ')'
-            #return '[](#' + lookups[teamID] + ')'
-        except KeyError:
-            link = "https://www.reddit.com/r/soccerbot/wiki/%s.json" % page
-            k = r.request_json(link)
-            lookups = json.loads(k.content_md)
-            if lookups['next'] == None:
-                end = True
-            else:
-                page = lookups['next']
-    return ''
-
 
 def writeLineUps(sub, body, t1, t1id, t2, t2id, team1Start, team1Sub, team2Start, team2Sub):
     markup = loadMarkup(sub)
@@ -248,17 +227,6 @@ def writeLineUps(sub, body, t1, t1id, t2, t2id, team1Start, team1Sub, team2Start
     body += ", ".join(x for x in team2Sub) + "."
 
     return body
-
-def findScoreSide(time,left,right):
-    leftTimes = [int(x) for x in re.findall(r'\b\d+\b', left)]
-    rightTimes = [int(x) for x in re.findall(r'\b\d+\b', right)]
-    if time in leftTimes and time in rightTimes:
-        return 'none'
-    if time in leftTimes:
-        return 'left'
-    if time in rightTimes:
-        return 'right'
-    return 'none'
 
 def findBBCSiteSingle(team1, team2):
     # search for each word in each team name in the fixture list, return most frequent result
@@ -319,6 +287,7 @@ def findBBCSiteSingle(team1, team2):
                 if remove_accents(team1).lower() == remove_accents(home.text).lower() and remove_accents(team2).lower() == remove_accents(away.text).lower():
                     possible.append(matchId)
 
+
                 if remove_accents(team1).lower() == remove_accents(away.text).lower() and remove_accents(team2).lower() == remove_accents(home.text).lower():
                     possible.append(matchId)
 
@@ -348,7 +317,7 @@ def grabStats(t1, t2):
     try:
         if lineWebsite.status_code == 200:
             body = '\n\n---------\n\n'
-            body += '**MATCH STATS** | *via [BBC]({})* | '.format(lineAddress)
+            body += '**MATCH STATS** | *via [BBC Sport]({})* | '.format(lineAddress)
             body += '*^(in testing, might not work properly)*\n\n'
             body += "||{}|{}|\n|:--|:--:|:--:|\n".format(t1, t2)
             data = []
