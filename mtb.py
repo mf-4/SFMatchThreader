@@ -265,13 +265,19 @@ def findBBCSiteSingle(team1, team2):
                 else:
                     # print("SKIPPING {} vs {}. NO LINK".format(home.text, away.text))
                     continue
-                matchId = re.findall("/sport/football/(.*)", link['href'])
+                matchId = re.findall("(?:[^\d]*)([\d]*)", link['href'])
 
-                if len(matchId) > 1:
+                valid_ids = []
+                #remove empty strings
+                for match in matchId:
+                    if match != '':
+                        valid_ids.append(match)
+
+                if len(valid_ids) > 1:
                     log_information("MORE THAN ONE MATCHID ON BBC PAGE FOR {} vs {}".format(home.text, away.text),
                                     level=logging.ERROR)
                 else:
-                    matchId = matchId[0]
+                    matchId = valid_ids[0]
 
                 if home is None or away is None:
                     if teams is None:
@@ -311,7 +317,7 @@ def grabStats(t1, t2):
         log_information("FAILED TO GET STATS FOR {} vs {}".format(t1, t2),
                         level=logging.ERROR)
         return ""
-    lineAddress = "https://www.bbc.co.uk/sport/football/{}".format(bbcID)
+    lineAddress = "https://www.bbc.co.uk/sport/live/football/{}".format(bbcID)
     lineWebsite = requests.get(lineAddress, timeout=15, stream=True)
     line_html = lineWebsite.text
     try:
