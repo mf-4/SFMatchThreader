@@ -47,6 +47,7 @@ custTimeLimit = {'sfmatchthreads': [10]}
 
 # no time limit to when user can post in specific subreddit
 timewhitelist = {'sfmatchthreads': ['mf__4']}
+
 # timewhitelist = {}
 def getTimestamp():
     day = str(datetime.datetime.now().day) if len(str(datetime.datetime.now().day)) > 1 else '0' + str(datetime.datetime.now().day)
@@ -330,7 +331,7 @@ def grabStats(t1, t2):
     try:
         if lineWebsite.status_code == 200:
             body = '\n\n---------\n\n'
-            body += '**MATCH STATS** | *via [BBC Sport]({})* | '.format(lineAddress)
+            body += '**MATCH STATS** | *via [BBC]({})* | '.format(lineAddress)
             body += '*^(in testing, might not work properly)*\n\n'
             body += "||{}|{}|\n|:--|:--:|:--:|\n".format(t1, t2)
             data = []
@@ -684,6 +685,8 @@ def createNewThread(team1, team2, reqr, sub, direct):
             if reqr == reqr_at and reqr not in usrwhitelist:
                 log_information("Denied post request from /u/{} - has an active thread request".format(reqr),
                                 level=logging.WARNING)
+                message_bot("Thread request from /u/{} has been rejected as they already have an active thread "
+                            "and are not in the whitelist, is this correct?".format(reqr))
                 return 7, ''
 
         # don't create a thread if the match is done (probably found the wrong match) or postponed
@@ -1301,7 +1304,7 @@ def check_spfl_games(attempts, premiership_teams):
     to_remove = []
     for team in premiership_teams:
         match_id = premiership_teams[team]
-        status, thread_id = createNewThread(team, "", "mf__4", "scottishfootball", match_id)
+        status, thread_id = createNewThread(team, "", "sfmatchthreadder", "scottishfootball", match_id)
         if status == 0:
             to_remove.append(team)
 
@@ -1321,8 +1324,7 @@ def check_sub_games(attempts, sub_games):
     log_information("custom subreddits - COUNT is {}".format(attempts),
                     level=logging.DEBUG)
 
-    relevant_subreddit = {"Rangers": 'SFMatchThreads',
-                          "Brentford": 'SFMatchThreads'}
+    relevant_subreddit = {"Rangers": 'SFMatchThreads'}
                  # "Celtic": u'celticfc',
                  # "Hibernian": u'hibsfc',
                  # "Aberdeen": u'aberdeenfc',
@@ -1397,7 +1399,7 @@ def check_sub_games(attempts, sub_games):
     to_remove = []
     for team in sub_games:
         match_id = sub_games[team]
-        status, thread_id = createNewThread(team, "", "mf__4", relevant_subreddit[team], match_id)
+        status, thread_id = createNewThread(team, "", "sfmatchthreadder", relevant_subreddit[team], match_id)
         if status == 0:
             to_remove.append(team)
 
